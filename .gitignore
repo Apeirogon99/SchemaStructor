@@ -4,6 +4,7 @@
 ### SchemaStructor ###
 ConnectString.txt
 CopyPath.txt
+src/Output/*
 
 ### Csharp ###
 ## Ignore Visual Studio temporary files, build results, and
