@@ -81,15 +81,23 @@ namespace SchemaStructor.Schema
                     tables.Add(table);
                 }
 
-                string jsonPath = "";
+                string outputPath = "";
                 DirectoryInfo? directoryInfo = Directory.GetParent(Environment.CurrentDirectory);
-                if(directoryInfo != null && directoryInfo.Parent != null)
+                if (directoryInfo != null && directoryInfo.Parent != null)
                 {
-                    jsonPath = directoryInfo.Parent.FullName;
+                    outputPath = directoryInfo.Parent.FullName;
                 }
 
+                string folderPath = Path.Combine(outputPath, "Json");
+                if (!Directory.Exists(folderPath))
+                {
+                    Directory.CreateDirectory(folderPath);
+                }
+
+
+
                 string jsonString = JsonSerializer.Serialize(tables, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText($"{jsonPath}/Json/{schemaName}.json", jsonString);
+                File.WriteAllText($"{outputPath}/Json/{schemaName}.json", jsonString);
 
                 this.connection.Close();
 
