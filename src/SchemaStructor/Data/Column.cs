@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace SchemaStructor.Schema
+namespace SchemaStructor.Data
 {
     public class Column
     {
