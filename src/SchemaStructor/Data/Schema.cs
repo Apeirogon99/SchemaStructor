@@ -41,7 +41,7 @@ namespace SchemaStructor.Data
                         {
                             if (true == schemaNameReader.Read())
                             {
-                                schemaName = schemaNameReader.GetString(0);
+                                schemaName = ParseTableName(schemaNameReader.GetString(0), "_");
                             }
                             else
                             {
@@ -52,7 +52,7 @@ namespace SchemaStructor.Data
 
                     //데이터베이스 모든 테이블 이름 얻기
                     {
-                        string getTablesNameQuery = $"SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{schemaName}';";
+                        string getTablesNameQuery = $"SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = SCHEMA();";
                         MySqlCommand getTablesNameCommand = new MySqlCommand(getTablesNameQuery, connnection);
 
                         using (MySqlDataReader tablesNameReader = getTablesNameCommand.ExecuteReader())
