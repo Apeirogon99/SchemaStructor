@@ -10,6 +10,7 @@ namespace SchemaStructor.Data
     {
         private string connectionString;
 
+        //private ConcurrentDictionary<string, DateTime> tableCache = new ConcurrentDictionary<string, DateTime>();
         private ConcurrentQueue<string> tableNames = new ConcurrentQueue<string>();
         private ConcurrentQueue<Table> tables = new ConcurrentQueue<Table>();
 
@@ -132,8 +133,7 @@ namespace SchemaStructor.Data
                             {
                                 Name = columnsReader.GetString(0),
                                 Type = ConvertMySqlTypeToCSharp(columnsReader.GetString(1)),
-                                Nullable = (columnsReader.GetString(2) == "YES"),
-                                Default = columnsReader.IsDBNull(3) ? "NULL" : columnsReader.GetString(3),
+                                Nullable = (columnsReader.GetString(2) == "YES")
                             };
 
                             if (column.Type == "enum")
@@ -141,6 +141,7 @@ namespace SchemaStructor.Data
                                 column.Values = ParseEnumValues(columnsReader.GetString(1));
                             }
 
+                            column.Default = column.Nullable ? "null" : ConvertMySqlDefaultToCSharp(columnsReader.GetString(3), column.Type);
 
                             table.Columns.Add(column);
                         }
@@ -205,8 +206,19 @@ namespace SchemaStructor.Data
                 };
 
                 // 매핑된 타입 반환, 없는 경우 기본적으로 string 타입 반환
-                return typeMapping.ContainsKey(type) ? typeMapping[type] : "string";
+                var result = typeMapping.FirstOrDefault(word => type.IndexOf(word.Key) != -1);
+                return !string.IsNullOrEmpty(result.Key) ? result.Value : "string";
             }
+        }
+
+        private string ConvertMySqlDefaultToCSharp(string value, string type)
+        {
+            string convertValue = value.Trim('\'');
+            if (convertValue == string.Empty)
+            {
+                convertValue = "string.Empty";
+            }
+            return convertValue;
         }
 
         /// <summary>
