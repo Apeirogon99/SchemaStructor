@@ -16,8 +16,11 @@ namespace SchemaStructor.Script
     {
 
         private string folderPath = string.Empty;
-        private string projectName = "WebCommonLibrary";
-        private string schemaName = "MasterDatabase";
+        private string reposiotryFolderPath = string.Empty;
+        private string reposiotryContextFolderPath = string.Empty;
+        private string interfaceFolderPath = string.Empty;
+        private string enumFolderPath = string.Empty;
+        private string modelsFolderPath = string.Empty;
 
         private ConcurrentQueue<Table>? tables = new ConcurrentQueue<Table>();
         private object _writeScriptLock = new object();
@@ -28,10 +31,58 @@ namespace SchemaStructor.Script
 
         public ScriptBuilder() 
         {
-            folderPath = Path.Combine(Program.OutputPath, "Script");
+            folderPath = Path.Combine(Program.OutputPath, Program.ProjectName);
             if (!Directory.Exists(folderPath))
             {
                 Directory.CreateDirectory(folderPath);
+            }
+
+            {
+                reposiotryFolderPath = folderPath + "/Reposiotry";
+                if (!Directory.Exists(reposiotryFolderPath))
+                {
+                    Directory.CreateDirectory(reposiotryFolderPath);
+                }
+
+                reposiotryContextFolderPath = reposiotryFolderPath + "/" + Program.SchemaName;
+                if (!Directory.Exists(reposiotryContextFolderPath))
+                {
+                    Directory.CreateDirectory(reposiotryContextFolderPath);
+                }
+
+                interfaceFolderPath = reposiotryFolderPath + "/Interfaces";
+                if (!Directory.Exists(interfaceFolderPath))
+                {
+                    Directory.CreateDirectory(interfaceFolderPath);
+                }
+            }
+
+            {
+                string enumPath = folderPath + "/Enum";
+                if (!Directory.Exists(enumPath))
+                {
+                    Directory.CreateDirectory(enumPath);
+                }
+
+                enumFolderPath = enumPath + "/" + Program.SchemaName;
+                if (!Directory.Exists(enumFolderPath))
+                {
+                    Directory.CreateDirectory(enumFolderPath);
+                }
+            }
+
+            {
+                string modelsPath = folderPath + "/Models";
+                if (!Directory.Exists(modelsPath))
+                {
+                    Directory.CreateDirectory(modelsPath);
+                }
+
+                modelsFolderPath = modelsPath + "/" + Program.SchemaName;
+                if (!Directory.Exists(modelsFolderPath))
+                {
+                    Directory.CreateDirectory(modelsFolderPath);
+                }
             }
         }
 
@@ -41,13 +92,13 @@ namespace SchemaStructor.Script
             {
 
 
-                string jsonPath = "";
                 DirectoryInfo? directoryInfo = Directory.GetParent(Environment.CurrentDirectory);
-                if (directoryInfo != null && directoryInfo.Parent != null)
+                if (directoryInfo == null || directoryInfo.Parent == null)
                 {
-                    jsonPath = directoryInfo.Parent.FullName + "/Json/";
+                    throw new Exception("bin 폴더가 존재하지 않습니다.");
                 }
 
+                string jsonPath = directoryInfo.Parent.FullName + "\\Json";
                 string[] jsonFilePaths = Directory.GetFiles(jsonPath, "*.json");
                 foreach (string filePath in jsonFilePaths)
                 {
@@ -86,7 +137,7 @@ namespace SchemaStructor.Script
                                 columnStructValueContextRegister += string.Format(StructContextFormat.StructValueContext,
                                     (column.Nullable == false) ? enumName : enumName + "?",
                                     column.Name,
-                                    column.Default);
+                                    enumName + "." + column.Default);
                             }
                             else
                             {
@@ -98,22 +149,27 @@ namespace SchemaStructor.Script
                         }
                         columnStructContextRegister = string.Format(StructContextFormat.StructContext, structName, columnStructValueContextRegister);
 
-                        var structText = string.Format(StructFormat.context, projectName, columnEnumContextRegister, columnStructContextRegister);
-                        File.WriteAllText($"{folderPath}/{structName}.cs", structText);
+                        var structText = string.Format(StructFormat.context, Program.ProjectName, Program.SchemaName, columnEnumContextRegister, columnStructContextRegister);
+                        File.WriteAllText($"{modelsFolderPath}/{structName}.cs", structText);
                     }
                 }
 
                 //스크립트 최종 생성
                 {
+                    var dbTable = string.Format(DbTableFormat.context, Program.ProjectName, Program.SchemaName);
+                    File.WriteAllText($"{reposiotryFolderPath}/DbTable.cs", dbTable);
 
+                    var dbContext = string.Format(DbContextFormat.context, Program.ProjectName, Program.SchemaName);
+                    File.WriteAllText($"{reposiotryFolderPath}/DbContext.cs", dbContext);
 
+                    var enumText = string.Format(EnumFormat.context, Program.ProjectName, Program.SchemaName, EnumContextRegister);
+                    File.WriteAllText($"{enumFolderPath}/{Program.SchemaName}TableName.cs", enumText);
 
+                    var schemaDbContext = string.Format(SchemaContextFormat.context, Program.ProjectName, Program.SchemaName);
+                    File.WriteAllText($"{reposiotryContextFolderPath}/{Program.SchemaName}Context.cs", schemaDbContext);
 
-                    var enumText = string.Format(EnumFormat.context, projectName, EnumContextRegister);
-                    File.WriteAllText($"{folderPath}/{schemaName}TableName.cs", enumText);
-
-                    var interfaceText = string.Format(InterfaceFormat.context, projectName, schemaName, TablesContextRegister);
-                    File.WriteAllText($"{folderPath}/I{schemaName}Context.cs", interfaceText);
+                    var interfaceText = string.Format(InterfaceFormat.context, Program.ProjectName, Program.SchemaName, TablesContextRegister);
+                    File.WriteAllText($"{interfaceFolderPath}/I{Program.SchemaName}Context.cs", interfaceText);
                 }
 
             }

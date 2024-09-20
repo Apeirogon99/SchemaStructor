@@ -8,15 +8,13 @@ namespace SchemaStructor.Data
 {
     public class Schema
     {
-        private string connectionString;
-
         //private ConcurrentDictionary<string, DateTime> tableCache = new ConcurrentDictionary<string, DateTime>();
         private ConcurrentQueue<string> tableNames = new ConcurrentQueue<string>();
         private ConcurrentQueue<Table> tables = new ConcurrentQueue<Table>();
 
-        public Schema(string connectionString)
+        public Schema()
         {
-            this.connectionString = connectionString;
+
         }
 
         public void Export(int workthreadNumber)
@@ -28,28 +26,9 @@ namespace SchemaStructor.Data
                     workthreadNumber = Math.Clamp(workthreadNumber, 1, Environment.ProcessorCount);
                 }
 
-                using (var connnection = new MySqlConnection(connectionString))
+                using (var connnection = new MySqlConnection(Program.ConnectionString))
                 {
                     connnection.Open();
-
-                    //데이터베이스의 이름 얻기
-                    string schemaName = string.Empty;
-                    {
-                        string getSchemaNameQuery = "SELECT SCHEMA();";
-                        MySqlCommand getSchemaNameCommand = new MySqlCommand(getSchemaNameQuery, connnection);
-
-                        using (MySqlDataReader schemaNameReader = getSchemaNameCommand.ExecuteReader())
-                        {
-                            if (true == schemaNameReader.Read())
-                            {
-                                schemaName = ParseTableName(schemaNameReader.GetString(0), "_");
-                            }
-                            else
-                            {
-                                throw new Exception("데이터베이스의 이름을 얻지 못함");
-                            }
-                        }
-                    }
 
                     //데이터베이스 모든 테이블 이름 얻기
                     {
@@ -81,14 +60,21 @@ namespace SchemaStructor.Data
 
                     //Json 직렬화하여 필요시 폴더및 파일 생성
                     {
-                        string folderPath = Path.Combine(Program.OutputPath, "Json");
-                        if (!Directory.Exists(folderPath))
+                        
+                        DirectoryInfo? directoryInfo = Directory.GetParent(Environment.CurrentDirectory);
+                        if (directoryInfo != null && directoryInfo.Parent != null)
                         {
-                            Directory.CreateDirectory(folderPath);
+                            string jsonPath = directoryInfo.Parent.FullName + "\\Json";
+                            if (!Directory.Exists(jsonPath))
+                            {
+                                Directory.CreateDirectory(jsonPath);
+                            }
+
+                            string jsonString = JsonSerializer.Serialize(tables, new JsonSerializerOptions { WriteIndented = true });
+
+                            File.WriteAllText($"{jsonPath}/{Program.SchemaName}.json", jsonString);
                         }
 
-                        string jsonString = JsonSerializer.Serialize(tables, new JsonSerializerOptions { WriteIndented = true });
-                        File.WriteAllText($"{Program.OutputPath}/Json/{schemaName}.json", jsonString);
                     }
 
                     connnection.Close();
@@ -105,7 +91,7 @@ namespace SchemaStructor.Data
 
             while (tableNames.TryDequeue(out var tableName))
             {
-                using (var connnection = new MySqlConnection(connectionString))
+                using (var connnection = new MySqlConnection(Program.ConnectionString))
                 {
                     await connnection.OpenAsync();
                     Console.WriteLine("Task : " + tableName);
@@ -113,7 +99,7 @@ namespace SchemaStructor.Data
                     //저장할 테이블 생성
                     Table table = new Table
                     {
-                        Name = ParseTableName(tableName, "_"),
+                        Name = ParseTableName(tableName, Program.TableNameSeparator),
                     };
 
                     //COLUMN (이름, 타입, NULLABLE, 디폴트) 검색
@@ -237,6 +223,12 @@ namespace SchemaStructor.Data
         /// </summary>
         private string ParseTableName(string tableName, string separator)
         {
+
+            if (string.IsNullOrEmpty(separator))
+            {
+                return tableName;
+            }
+
             string[] words = tableName.Split(separator);
 
             for (int i = 0; i < words.Length; i++)
