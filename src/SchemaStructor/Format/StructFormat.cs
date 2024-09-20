@@ -4,8 +4,12 @@ namespace SchemaStructor.Format
     internal class StructFormat
     {
 
-        // {0} 테이블 ENUM
-        // {1} 테이블 STRUCT 
+        /// <summary>
+        /// {0} 프로젝트 이름
+        /// {1} 스키마 이름
+        /// {2} enum context
+        /// {3} struct context
+        /// </summary>
         public static string context =
             @"
 using System;
@@ -13,10 +17,10 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 
-namespace {0}.Models.Struct
+namespace {0}.Models.{1}
 {{
-        {1}
         {2}
+        {3}
 
 }}";
 

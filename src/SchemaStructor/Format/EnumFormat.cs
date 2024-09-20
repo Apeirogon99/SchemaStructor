@@ -8,16 +8,20 @@ namespace SchemaStructor.Format
 {
     internal class EnumFormat
     {
-        // {0} 테이블 이름
+        /// <summary>
+        /// {0} 프로젝트 이름
+        /// {1} 스키마 이름
+        /// {2} eunm context
+        /// </summary>
         public static string context =
                         @"
 
-namespace {0}.Models.Enum
+namespace {0}.Models.{1}
 {{
 
         public enum ETableName
         {{
-            None,{1}
+            None,{2}
         }}
 
 }}";

@@ -14,14 +14,13 @@ namespace SchemaStructor.Format
         /// {2} Tables
         /// </summary>
         public static string context =
-            @"using {0}.Models;
+            @"using {0}.Models.{1};
 
 namespace {0}.Reposiotry.Interfaces
 {{
 
     public interface I{1}Context : IDisposable
-    {{
-        {2}
+    {{{2}
     }}
 
 }}";
