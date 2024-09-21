@@ -15,12 +15,21 @@ namespace SchemaStructor.Script
     public class ScriptBuilder
     {
 
-        private string folderPath = string.Empty;
+        private string structOutputPath = string.Empty;
+        private string reposiotryOutputPath = string.Empty;
+
         private string reposiotryFolderPath = string.Empty;
         private string reposiotryContextFolderPath = string.Empty;
         private string interfaceFolderPath = string.Empty;
         private string enumFolderPath = string.Empty;
         private string modelsFolderPath = string.Empty;
+        
+
+        //ScheamContext
+        private string regionContextRegister = string.Empty;
+        private string constructContextRegister = string.Empty;
+        private string loadTableContextRegister = string.Empty;
+        private string isValidContextRegister = string.Empty;
 
         private ConcurrentQueue<Table>? tables = new ConcurrentQueue<Table>();
         private object _writeScriptLock = new object();
@@ -31,14 +40,20 @@ namespace SchemaStructor.Script
 
         public ScriptBuilder() 
         {
-            folderPath = Path.Combine(Program.OutputPath, Program.ProjectName);
-            if (!Directory.Exists(folderPath))
+            structOutputPath = Path.Combine(Program.StructOutputPath, Program.ProjectName);
+            if (!Directory.Exists(structOutputPath))
             {
-                Directory.CreateDirectory(folderPath);
+                Directory.CreateDirectory(structOutputPath);
+            }
+
+            reposiotryOutputPath = Path.Combine(Program.ReposiotryOutputPath);
+            if (!Directory.Exists(reposiotryOutputPath))
+            {
+                Directory.CreateDirectory(reposiotryOutputPath);
             }
 
             {
-                reposiotryFolderPath = folderPath + "/Reposiotry";
+                reposiotryFolderPath = reposiotryOutputPath + "/Reposiotry";
                 if (!Directory.Exists(reposiotryFolderPath))
                 {
                     Directory.CreateDirectory(reposiotryFolderPath);
@@ -58,7 +73,7 @@ namespace SchemaStructor.Script
             }
 
             {
-                string enumPath = folderPath + "/Enum";
+                string enumPath = structOutputPath + "/Enum";
                 if (!Directory.Exists(enumPath))
                 {
                     Directory.CreateDirectory(enumPath);
@@ -72,7 +87,7 @@ namespace SchemaStructor.Script
             }
 
             {
-                string modelsPath = folderPath + "/Models";
+                string modelsPath = structOutputPath + "/Models";
                 if (!Directory.Exists(modelsPath))
                 {
                     Directory.CreateDirectory(modelsPath);
@@ -110,10 +125,14 @@ namespace SchemaStructor.Script
                         continue;
                     }
 
+                    string isValidColumnContextRegister = ""; //IsValid에 들어갈 테이블
                     while (tables.TryDequeue(out var table))
                     {
                         string tableName = table.Name;
                         string structName = "F" + table.Name;
+
+                        regionContextRegister += string.Format(SchemaContextFormat.RegionContext, structName, tableName);
+                        constructContextRegister += string.Format(SchemaContextFormat.ConstructContext, tableName);
 
                         EnumContextRegister += string.Format(EnumContextFormat.EnumContext, tableName);
                         TablesContextRegister += string.Format(InterfaceContextFormat.TablesContext, structName, tableName);
@@ -123,6 +142,11 @@ namespace SchemaStructor.Script
 
                         string columnStructContextRegister = "";
                         string columnStructValueContextRegister = "";
+
+                        string queryContext = ""; //테이블 쿼리
+                        string columnNamesInQueryContext = "";  //쿼리 안에 들어갈 컬럼 이름
+
+
                         foreach (Column column in table.Columns)
                         {
                             if(column.Values != null)
@@ -146,12 +170,25 @@ namespace SchemaStructor.Script
                                     column.Name,
                                     column.Default);
                             }
+
+                            columnNamesInQueryContext += string.Format(SchemaContextFormat.ColumnNamesContext, column.Name);
                         }
                         columnStructContextRegister = string.Format(StructContextFormat.StructContext, structName, columnStructValueContextRegister);
+
+                        //스키마 쿼리 및 테이블 로드
+                        columnNamesInQueryContext = columnNamesInQueryContext.Substring(0, columnNamesInQueryContext.Length - 2);
+                        queryContext = string.Format(SchemaContextFormat.QueryContext, columnNamesInQueryContext, table.DbTableName);
+                        loadTableContextRegister += string.Format(SchemaContextFormat.LoadTableContext, structName, tableName, queryContext);
+
+                        isValidColumnContextRegister += string.Format(SchemaContextFormat.IsValidColumnContext, tableName);
+
 
                         var structText = string.Format(StructFormat.context, Program.ProjectName, Program.SchemaName, columnEnumContextRegister, columnStructContextRegister);
                         File.WriteAllText($"{modelsFolderPath}/{structName}.cs", structText);
                     }
+
+                    //테이블 존재하는지 확인
+                    isValidContextRegister += string.Format(SchemaContextFormat.IsValidContext, isValidColumnContextRegister);
                 }
 
                 //스크립트 최종 생성
@@ -165,7 +202,7 @@ namespace SchemaStructor.Script
                     var enumText = string.Format(EnumFormat.context, Program.ProjectName, Program.SchemaName, EnumContextRegister);
                     File.WriteAllText($"{enumFolderPath}/{Program.SchemaName}TableName.cs", enumText);
 
-                    var schemaDbContext = string.Format(SchemaContextFormat.context, Program.ProjectName, Program.SchemaName);
+                    var schemaDbContext = string.Format(SchemaDbContextFormat.context, Program.ProjectName, Program.SchemaName, regionContextRegister, constructContextRegister, loadTableContextRegister, isValidContextRegister);
                     File.WriteAllText($"{reposiotryContextFolderPath}/{Program.SchemaName}Context.cs", schemaDbContext);
 
                     var interfaceText = string.Format(InterfaceFormat.context, Program.ProjectName, Program.SchemaName, TablesContextRegister);

@@ -9,6 +9,7 @@ namespace SchemaStructor.Data
     public class Table
     {
         public string Name { get; set; } = string.Empty;
+        public string DbTableName { get; set; } = string.Empty;
         public List<Column> Columns { get; set; } = new List<Column>();
     }
 }

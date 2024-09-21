@@ -14,7 +14,9 @@ namespace SchemaStructor.Format
         /// {2} Tables
         /// </summary>
         public static string context =
-            @"using {0}.Models.{1};
+            @"
+using System;
+using {0}.Models.{1};
 
 namespace {0}.Reposiotry.Interfaces
 {{
@@ -34,6 +36,6 @@ namespace {0}.Reposiotry.Interfaces
         /// </summary>
         public static string TablesContext = 
             @"
-            public DbTable<{0}> {1} {{ get; set; }}";
+            public DbTable<{0}> {1} {{ get; }}";
     }
 }
