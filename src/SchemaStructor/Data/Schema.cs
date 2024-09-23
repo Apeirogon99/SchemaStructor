@@ -49,18 +49,34 @@ namespace SchemaStructor.Data
                         }
                     }
 
+                    //Cache 읽어서 수정사항 확인
+                    {
+                        DirectoryInfo? directoryInfo = Directory.GetParent(Environment.CurrentDirectory);
+                        if (directoryInfo != null && directoryInfo.Parent != null)
+                        {
+                            string cachePath = directoryInfo.Parent.FullName + "\\Cache";
+                            if (!Directory.Exists(cachePath))
+                            {
+                                Directory.CreateDirectory(cachePath);
+                            }
+
+                            if (tableNames.Count <= 0)
+                            {
+                                throw new Exception("데이터베이스의 테이블에 수정사항이 존재하지 않음");
+                            }
+                        }
+                    }
+
                     //비동기 추출
                     var tasks = new List<Task>();
                     for (int i = 0; i < workthreadNumber; i++)
                     {
                         tasks.Add(DoExportAsync());
                     }
-
                     Task.WhenAll(tasks).Wait();
 
                     //Json 직렬화하여 필요시 폴더및 파일 생성
                     {
-                        
                         DirectoryInfo? directoryInfo = Directory.GetParent(Environment.CurrentDirectory);
                         if (directoryInfo != null && directoryInfo.Parent != null)
                         {
@@ -70,7 +86,8 @@ namespace SchemaStructor.Data
                                 Directory.CreateDirectory(jsonPath);
                             }
 
-                            string jsonString = JsonSerializer.Serialize(tables, new JsonSerializerOptions { WriteIndented = true });
+                            var orderByTables = tables.OrderBy(table => table.Name).ToList();
+                            string jsonString = JsonSerializer.Serialize(orderByTables, new JsonSerializerOptions { WriteIndented = true });
 
                             File.WriteAllText($"{jsonPath}/{Program.SchemaName}.json", jsonString);
                         }
@@ -99,6 +116,7 @@ namespace SchemaStructor.Data
                     //저장할 테이블 생성
                     Table table = new Table
                     {
+                        DbTableName = tableName,
                         Name = ParseTableName(tableName, Program.TableNameSeparator),
                     };
 
