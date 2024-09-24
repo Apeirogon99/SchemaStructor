@@ -67,7 +67,7 @@ namespace SchemaStructor.Script
 
                 string jsonPath = directoryInfo.Parent.FullName + "\\Json";
                 string[] jsonFilePaths = Directory.GetFiles(jsonPath, $"*.json");
-                string? schemaFilePath = jsonFilePaths.FirstOrDefault(file => file == $"{Program.SchemaName}.json");
+                string? schemaFilePath = jsonFilePaths.FirstOrDefault(file => file.Contains($"{Program.SchemaName}.json"));
                 if (schemaFilePath != null)
                 {
                     string jsonContent = File.ReadAllText(schemaFilePath);

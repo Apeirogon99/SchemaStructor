@@ -145,7 +145,26 @@ namespace SchemaStructor.Data
                                 column.Values = ParseEnumValues(columnsReader.GetString(1));
                             }
 
-                            column.Default = column.Nullable ? "null" : ConvertMySqlDefaultToCSharp(columnsReader.GetString(3), column.Type);
+                            //Default를 따로 지정하지 않았을 경우
+                            bool isDefaultNull = columnsReader.IsDBNull(3);
+                            if (column.Nullable)
+                            {
+                                column.Default = "null";
+                            }
+                            else if (column.Type == "enum")
+                            {
+                                column.Values = ParseEnumValues(columnsReader.GetString(1));
+
+                                string value = (true == isDefaultNull) ? column.Values[0] : columnsReader.GetString(3);
+                                column.Default = ConvertMySqlDefaultToCSharp(value, column.Type);
+                            }
+                            else
+                            {
+                                string value = (true == isDefaultNull) ? "" : columnsReader.GetString(3);
+                                column.Default = ConvertMySqlDefaultToCSharp(value, column.Type);
+                            }
+                            
+
 
                             table.Columns.Add(column);
                         }
@@ -215,14 +234,43 @@ namespace SchemaStructor.Data
             }
         }
 
+        /// <summary>
+        /// 값이 있다면 타입에 맞게 정의
+        /// </summary>
         private string ConvertMySqlDefaultToCSharp(string value, string type)
         {
             string convertValue = value.Trim('\'');
-            if (convertValue == string.Empty)
-            {
-                convertValue = "string.Empty";
-            }
-            return convertValue;
+
+            var typeMapping = new Dictionary<string, string>()
+                {
+                    // 정수 타입 매핑
+                    { "byte", convertValue == "" ? "0" : convertValue },
+                    { "short", convertValue == "" ? "0" : convertValue },
+                    { "int", convertValue == "" ? "0" : convertValue },
+                    { "long", convertValue == "" ? "0" : convertValue },
+
+                    // 부동 소수점 타입 매핑
+                    { "float", convertValue == "" ? "0" : convertValue },
+                    { "double", convertValue == "" ? "0.0" : convertValue },
+                    { "decimal", convertValue == "" ? "0" : convertValue },
+
+                    // 문자열 타입 매핑
+                    { "string", convertValue == "" ? "string.Empty" : convertValue },
+
+                    // 날짜 및 시간 타입 매핑
+                    { "DateTime", "DateTime.MinValue" },
+                    { "TimeSpan", "TimeSpan.Zero" },
+
+                    // 기타 타입 매핑
+                    { "byte[]", "new byte[]" },
+                    { "bool", "false" },
+                    { "json", "string.Empty" },
+                    { "enum", convertValue }
+                };
+
+            // 매핑된 타입 반환, 없는 경우 기본적으로 string 타입 반환
+            var result = typeMapping.FirstOrDefault(word => type.IndexOf(word.Key) != -1);
+            return !string.IsNullOrEmpty(result.Key) ? result.Value : "string.Empty";
         }
 
         /// <summary>
