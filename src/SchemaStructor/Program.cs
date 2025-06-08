@@ -43,7 +43,6 @@ class Program
         if(ConnectionString != string.Empty && ProjectName != string.Empty && SchemaName != string.Empty)
         {
             Stopwatch stopwatch = new Stopwatch();
-
             stopwatch.Start();
             
             Schema schema = new Schema();
