@@ -2,14 +2,18 @@
 using SchemaStructor.Script;
 using System.Collections.Concurrent;
 using System.Globalization;
+using System.Text;
+using System.Text.Encodings.Web;
 using System.Text.Json;
+using System.Text.Unicode;
+using System.Xml.Linq;
 
 namespace SchemaStructor.Data
 {
     public class Schema
     {
         //private ConcurrentDictionary<string, DateTime> tableCache = new ConcurrentDictionary<string, DateTime>();
-        private ConcurrentQueue<string> tableNames = new ConcurrentQueue<string>();
+        private ConcurrentQueue<History> histories = new ConcurrentQueue<History>();
         private ConcurrentQueue<Table> tables = new ConcurrentQueue<Table>();
 
         public Schema()
@@ -32,18 +36,26 @@ namespace SchemaStructor.Data
 
                     //데이터베이스 모든 테이블 이름 얻기
                     {
-                        string getTablesNameQuery = $"SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = SCHEMA();";
-                        MySqlCommand getTablesNameCommand = new MySqlCommand(getTablesNameQuery, connnection);
+                        string getTablesHistoryQuery = $"" +
+                            $"SELECT TABLE_NAME, CREATE_TIME, UPDATE_TIME " +
+                            $"FROM information_schema.TABLES " +
+                            $"WHERE TABLE_SCHEMA = SCHEMA();";
+                        MySqlCommand getTablesHistoryCommand = new MySqlCommand(getTablesHistoryQuery, connnection);
 
-                        using (MySqlDataReader tablesNameReader = getTablesNameCommand.ExecuteReader())
+                        using (MySqlDataReader tablesHistoryReader = getTablesHistoryCommand.ExecuteReader())
                         {
-                            while (tablesNameReader.Read())
+
+                            while (tablesHistoryReader.Read())
                             {
-                                tableNames.Enqueue(tablesNameReader.GetString(0));
+                                History history = new History();
+                                history.table_name = tablesHistoryReader.GetString(0);
+                                history.create_time = tablesHistoryReader.IsDBNull(1) ? DateTime.MinValue : tablesHistoryReader.GetDateTime(1);
+                                history.update_time = tablesHistoryReader.IsDBNull(2) ? DateTime.MinValue : tablesHistoryReader.GetDateTime(2);
+                                histories.Enqueue(history);
                             }
                         }
 
-                        if (tableNames.Count <= 0)
+                        if (histories.Count <= 0)
                         {
                             throw new Exception("데이터베이스의 테이블에 대한 정보가 존재하지 않음");
                         }
@@ -54,13 +66,13 @@ namespace SchemaStructor.Data
                         DirectoryInfo? directoryInfo = Directory.GetParent(Environment.CurrentDirectory);
                         if (directoryInfo != null && directoryInfo.Parent != null)
                         {
-                            string cachePath = directoryInfo.Parent.FullName + "\\Cache";
+                            string cachePath = directoryInfo.Parent.FullName + "\\History";
                             if (!Directory.Exists(cachePath))
                             {
                                 Directory.CreateDirectory(cachePath);
                             }
 
-                            if (tableNames.Count <= 0)
+                            if (histories.Count <= 0)
                             {
                                 throw new Exception("데이터베이스의 테이블에 수정사항이 존재하지 않음");
                             }
@@ -87,9 +99,9 @@ namespace SchemaStructor.Data
                             }
 
                             var orderByTables = tables.OrderBy(table => table.Name).ToList();
-                            string jsonString = JsonSerializer.Serialize(orderByTables, new JsonSerializerOptions { WriteIndented = true });
+                            string jsonString = JsonSerializer.Serialize(orderByTables, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.Create(UnicodeRanges.All) });
 
-                            File.WriteAllText($"{jsonPath}/{Program.SchemaName}.json", jsonString);
+                            File.WriteAllText($"{jsonPath}/{Program.SchemaName}.json", jsonString, Encoding.UTF8);
                         }
 
                     }
@@ -106,25 +118,25 @@ namespace SchemaStructor.Data
         public async Task DoExportAsync()
         {
 
-            while (tableNames.TryDequeue(out var tableName))
+            while (histories.TryDequeue(out var history))
             {
                 using (var connnection = new MySqlConnection(Program.ConnectionString))
                 {
                     await connnection.OpenAsync();
-                    Console.WriteLine("Task : " + tableName);
+                    Console.WriteLine("Task : " + history.table_name);
 
                     //저장할 테이블 생성
                     Table table = new Table
                     {
-                        DbTableName = tableName,
-                        Name = ParseTableName(tableName, Program.TableNameSeparator),
+                        DbTableName = history.table_name,
+                        Name = ParseTableName(history.table_name, Program.TableNameSeparator),
                     };
 
                     //COLUMN (이름, 타입, NULLABLE, 디폴트) 검색
                     string getColumnsQuery = $@"
-                            SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT
+                            SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_COMMENT
                             FROM information_schema.columns 
-                            WHERE TABLE_NAME = '{tableName}' AND TABLE_SCHEMA = SCHEMA();";
+                            WHERE TABLE_NAME = '{history.table_name}' AND TABLE_SCHEMA = SCHEMA();";
 
 
                     //검색한 결과를 Column에 입력
@@ -137,7 +149,8 @@ namespace SchemaStructor.Data
                             {
                                 Name = columnsReader.GetString(0),
                                 Type = ConvertMySqlTypeToCSharp(columnsReader.GetString(1)),
-                                Nullable = (columnsReader.GetString(2) == "YES")
+                                Nullable = (columnsReader.GetString(2) == "YES"),
+                                Comment = columnsReader.IsDBNull(4) ? "NONE COMMENT" : columnsReader.GetString(4),
                             };
 
                             if (column.Type == "enum")
@@ -192,7 +205,7 @@ namespace SchemaStructor.Data
                 var typeMapping = new Dictionary<string, string>()
                 {
                     // 정수 타입 매핑
-                    { "tinyint", "byte" },
+                    { "tinyint", "bool" },
                     { "smallint", "short" },
                     { "mediumint", "int" },
                     { "int", "int" },

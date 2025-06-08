@@ -131,14 +131,16 @@ namespace SchemaStructor.Script
                         columnStructValueContextRegister += string.Format(StructContextFormat.StructValueContext,
                             (column.Nullable == false) ? enumName : enumName + "?",
                             column.Name,
-                            enumName + "." + column.Default);
+                            enumName + "." + column.Default,
+                            column.Comment);
                     }
                     else
                     {
                         columnStructValueContextRegister += string.Format(StructContextFormat.StructValueContext,
                             (column.Nullable == false) ? column.Type : column.Type + "?",
                             column.Name,
-                            column.Default);
+                            column.Default,
+                            column.Comment);
                     }
 
 

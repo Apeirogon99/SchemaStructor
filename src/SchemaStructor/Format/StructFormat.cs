@@ -53,8 +53,11 @@ namespace {0}.Models.{1}
         // {0} 컬럼 타입
         // {1} 컬럼 이름
         // {2} 컬럼 디폴트 값
+        // {3} 컬럼 코멘트
         public static string StructValueContext =
-            @"		
-        public {0} {1} {{ get; set; }} = {2};";
+            @"
+        //{3}
+        public {0} {1} {{ get; set; }} = {2};
+            ";
     }
 }

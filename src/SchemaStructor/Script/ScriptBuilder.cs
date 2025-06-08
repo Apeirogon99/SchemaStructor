@@ -63,7 +63,7 @@ namespace SchemaStructor.Script
             }
         }
 
-        public void Build(int workThreadNumber)
+        public void Build()
         {
             try
             {
@@ -75,7 +75,7 @@ namespace SchemaStructor.Script
 
                 string jsonPath = directoryInfo.Parent.FullName + "\\Json";
                 string[] jsonFilePaths = Directory.GetFiles(jsonPath, $"*.json");
-                string? schemaFilePath = jsonFilePaths.FirstOrDefault(file => file == $"{Program.SchemaName}.json");
+                string? schemaFilePath = jsonFilePaths.FirstOrDefault(file => file.Contains($"{Program.SchemaName}.json"));
                 if (schemaFilePath != null)
                 {
                     string jsonContent = File.ReadAllText(schemaFilePath);
@@ -90,7 +90,7 @@ namespace SchemaStructor.Script
                     {
                         foreach (var table in tables)
                         {
-                            InterfaceContextRegister += string.Format(InterfaceContextFormat.TablesContext, table.Name, "F" + table.Name);
+                            InterfaceContextRegister += string.Format(InterfaceContextFormat.TablesContext, "F" + table.Name, table.Name);
                         }
                     }
 
