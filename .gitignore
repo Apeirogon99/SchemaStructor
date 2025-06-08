@@ -5,6 +5,7 @@
 ConnectString.txt
 CopyPath.txt
 src/Output/*
+src/History/*
 
 ### Csharp ###
 ## Ignore Visual Studio temporary files, build results, and

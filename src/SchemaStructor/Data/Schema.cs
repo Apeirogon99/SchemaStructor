@@ -13,7 +13,7 @@ namespace SchemaStructor.Data
     public class Schema
     {
         //private ConcurrentDictionary<string, DateTime> tableCache = new ConcurrentDictionary<string, DateTime>();
-        private ConcurrentQueue<History> histories = new ConcurrentQueue<History>();
+        private ConcurrentDictionary<string, History> histories = new ConcurrentDictionary<string, History>();
         private ConcurrentQueue<Table> tables = new ConcurrentQueue<Table>();
 
         public Schema()
@@ -38,7 +38,7 @@ namespace SchemaStructor.Data
                     {
                         string getTablesHistoryQuery = $"" +
                             $"SELECT TABLE_NAME, CREATE_TIME, UPDATE_TIME " +
-                            $"FROM information_schema.TABLES " +
+                            $"FROM INFORMATION_SCHEMA.TABLES " +
                             $"WHERE TABLE_SCHEMA = SCHEMA();";
                         MySqlCommand getTablesHistoryCommand = new MySqlCommand(getTablesHistoryQuery, connnection);
 
@@ -51,7 +51,7 @@ namespace SchemaStructor.Data
                                 history.table_name = tablesHistoryReader.GetString(0);
                                 history.create_time = tablesHistoryReader.IsDBNull(1) ? DateTime.MinValue : tablesHistoryReader.GetDateTime(1);
                                 history.update_time = tablesHistoryReader.IsDBNull(2) ? DateTime.MinValue : tablesHistoryReader.GetDateTime(2);
-                                histories.Enqueue(history);
+                                histories.TryAdd(history.table_name, history);
                             }
                         }
 
@@ -66,16 +66,52 @@ namespace SchemaStructor.Data
                         DirectoryInfo? directoryInfo = Directory.GetParent(Environment.CurrentDirectory);
                         if (directoryInfo != null && directoryInfo.Parent != null)
                         {
-                            string cachePath = directoryInfo.Parent.FullName + "\\History";
+                            string cachePath = directoryInfo.Parent.Parent.Parent.FullName + "\\History";
                             if (!Directory.Exists(cachePath))
                             {
                                 Directory.CreateDirectory(cachePath);
+                            }
+
+                            // 폴더에 똑같은 테이블과 비교하여 update time은 변경되었는지 확인
+                            List<History> newHistories = histories.Values.OrderBy(history => history.table_name).ToList();
+                            string[] cahceJsonFilePaths = Directory.GetFiles(cachePath, $"*.json");
+                            string? schemaFilePath = cahceJsonFilePaths.FirstOrDefault(file => file.Contains($"{Program.SchemaName}.json"));
+                            if (schemaFilePath != null)
+                            {
+                                string jsonContent = File.ReadAllText(schemaFilePath);
+                                var oldHistories = JsonSerializer.Deserialize<List<History>>(jsonContent);
+                                if (oldHistories != null && oldHistories.Count != 0)
+                                {
+                                    foreach(var oldHistory in oldHistories)
+                                    {
+            
+                                        if(histories.TryGetValue(oldHistory.table_name, out History? newHistory))
+                                        {
+                                            if(newHistory == null)
+                                            {
+                                                continue;
+                                            }
+
+                                            int cmp = DateTime.Compare(oldHistory.update_time, newHistory.update_time);
+                                            if (cmp == 1 || cmp == 0)
+                                            {
+                                                histories.Remove(oldHistory.table_name, out History? outRemove);
+                                            }
+                                        }
+                                    }
+                                }
                             }
 
                             if (histories.Count <= 0)
                             {
                                 throw new Exception("데이터베이스의 테이블에 수정사항이 존재하지 않음");
                             }
+
+                            // 모두 덮어씌우기
+
+                            string jsonString = JsonSerializer.Serialize(newHistories, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.Create(UnicodeRanges.All) });
+
+                            File.WriteAllText($"{cachePath}/{Program.SchemaName}.json", jsonString, Encoding.UTF8);
                         }
                     }
 
@@ -118,25 +154,25 @@ namespace SchemaStructor.Data
         public async Task DoExportAsync()
         {
 
-            while (histories.TryDequeue(out var history))
+            foreach (KeyValuePair<string, History> history in histories)
             {
                 using (var connnection = new MySqlConnection(Program.ConnectionString))
                 {
                     await connnection.OpenAsync();
-                    Console.WriteLine("Task : " + history.table_name);
+                    Console.WriteLine("Task : " + history.Key);
 
                     //저장할 테이블 생성
                     Table table = new Table
                     {
-                        DbTableName = history.table_name,
-                        Name = ParseTableName(history.table_name, Program.TableNameSeparator),
+                        DbTableName = history.Key,
+                        Name = ParseTableName(history.Key, Program.TableNameSeparator),
                     };
 
                     //COLUMN (이름, 타입, NULLABLE, 디폴트) 검색
                     string getColumnsQuery = $@"
                             SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, COLUMN_COMMENT
                             FROM information_schema.columns 
-                            WHERE TABLE_NAME = '{history.table_name}' AND TABLE_SCHEMA = SCHEMA();";
+                            WHERE TABLE_NAME = '{history.Key}' AND TABLE_SCHEMA = SCHEMA();";
 
 
                     //검색한 결과를 Column에 입력
