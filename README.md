@@ -6,7 +6,8 @@ SchemaStructor는 MySQL 데이터베이스 스키마를 분석하여 C# 모델 �
 
 # 📋 목차
 - [문제 상황](#문제-상황)
-- [해결 방안](#해결-방안)
+- [동작 방식](#동작-방식)
+- [문제 및 해결 방안](#문제-및-해결-방안)
 - [성능 최적화](#성능-최적화)
 - [사용법](#사용법)
 - [결과 예시](#결과-예시)
@@ -21,33 +22,39 @@ SchemaStructor는 MySQL 데이터베이스 스키마를 분석하여 C# 모델 �
 
 또한 GunShooterOnline프로젝트에 사용될 웹 서버, 소켓 서버의 마스터데이터 베이스를 호출하는 스크립트도 자동화 하는 것으로 목표를 새웠습니다.<br/>
 
-# 해결 방안
+# 동작 방식
+1. 데이터베이스의 테이블 UPDATE_TIME을 로컬에 저장된 History와 비교하여 업데이트할 테이블 분리한다
+2. 업데이트할 테이블에 Name, Type, Nullable, Default, Comment를 검색한다
+3. 데이터베이스와 C#타입을 서로 매핑하여 Json을 생성한다
+4. Json 데이터를 기반으로 C# 모델 클래스, Enum을 작성한다
 
-### C# 클래스 및 Enum 자동 생성
-MySQL 작성 시 다음 규칙을 준수합니다:
+# 문제 및 해결 방안
+
+### 변경 전략
+
+MySQL 작성 시 다음 규칙을 준수
  - Name, Type, Nullable, Default, Comment 정보를 명확히 작성
 
-스키마 정보를 JSON 형식으로 추출
+스키마 정보를 JSON 형식으로 추출하며 DB타입과 C#타입을 매핑
 - JSON 데이터를 기반으로 구조체 자동 생성
 - ENUM 타입의 경우 별도 enum 클래스 생성
-- DEFAULT 값을 기본값으로 설정
+- DEFAULT 값을 기본값으로 설정, Nullable하다면 null을 설정
 - COMMENT를 코드 주석으로 자동 변환
 
-
-### Read only Database Context
-웹 서버와 소켓 서버에서 사용할 읽기 전용 컨텍스트를 자동 생성합니다
-- 마스터데이터를 메모리에 저장하여 빠른 접근 제공
-- IEnumerable 인터페이스 구현으로 LINQ 사용 가능
-- Find 메서드를 통한 Get 기능 제공
-
-### 자동화화
-패킷 자동화 경험을 바탕으로 Format 기반 자동화를 구현했습니다
+Json을 바탕으로 C# 클래스 및 Enum 작성
+- 패킷 자동화 경험을 바탕으로 Format 기반 자동화 구현
 ```
 var dbTable = string.Format(DbTableFormat.context,
     Program.ProjectName,
     Program.SchemaName);
 File.WriteAllText($"{reposiotryFolderPath}/DbTable.cs", dbTable);
 ```
+
+### 좀 더 사용하기 쉽게 만들 수 없나? => Read Only Database Context
+웹 서버와 소켓 서버에서 사용할 읽기 전용 컨텍스트를 자동 생성합니다
+- 마스터데이터를 메모리에 저장하여 빠른 접근 제공
+- IEnumerable 인터페이스 구현으로 LINQ 사용 가능
+- Find 메서드를 통한 Get 기능 제공
 
 # 성능 최적화
 
