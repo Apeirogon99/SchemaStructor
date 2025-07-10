@@ -39,48 +39,54 @@ class Program
             ReposiotryOutputPath = config["ApplicationSettings:ReposiotryOutputPath"] ?? string.Empty;
         }
 
-        int workThreadNumber = 1;
-        if(ConnectionString != string.Empty && ProjectName != string.Empty && SchemaName != string.Empty)
+        int workThreadNumber = 4;
+        try
         {
-            Stopwatch stopwatch = new Stopwatch();
-            stopwatch.Start();
-            
-            Schema schema = new Schema();
-            schema.Export(workThreadNumber);
+            if (ConnectionString != string.Empty && ProjectName != string.Empty && SchemaName != string.Empty)
+            {
+                Stopwatch stopwatch = new Stopwatch();
+                stopwatch.Start();
 
-            stopwatch.Stop();
-            Console.WriteLine($"Schema export elapsed time: {stopwatch.ElapsedMilliseconds} ms");
+                Schema schema = new Schema();
+                schema.Export(workThreadNumber);
+
+                stopwatch.Stop();
+                Console.WriteLine($"Schema export elapsed time: {stopwatch.ElapsedMilliseconds} ms");
+            }
+            else
+            {
+                return;
+            }
+
+            if (StructOutputPath != string.Empty)
+            {
+                Stopwatch stopwatch = new Stopwatch();
+
+                stopwatch.Start();
+
+                StructBuilder structBuilder = new StructBuilder();
+                structBuilder.Build(workThreadNumber);
+
+                stopwatch.Stop();
+                Console.WriteLine($"Struct builder elapsed time: {stopwatch.ElapsedMilliseconds} ms");
+            }
+
+            if (ReposiotryOutputPath != string.Empty)
+            {
+                Stopwatch stopwatch = new Stopwatch();
+
+                stopwatch.Start();
+
+                ScriptBuilder scriptBuilder = new ScriptBuilder();
+                scriptBuilder.Build();
+
+                stopwatch.Stop();
+                Console.WriteLine($"Script builder elapsed time: {stopwatch.ElapsedMilliseconds} ms");
+            }
         }
-        else
+        catch (Exception ex)
         {
-            return;
+            Console.WriteLine("(Error)" + ex.Message);
         }
-
-        if(StructOutputPath != string.Empty)
-        {
-            Stopwatch stopwatch = new Stopwatch();
-
-            stopwatch.Start();
-
-            StructBuilder structBuilder = new StructBuilder();
-            structBuilder.Build(workThreadNumber);
-
-            stopwatch.Stop();
-            Console.WriteLine($"Struct builder elapsed time: {stopwatch.ElapsedMilliseconds} ms");
-        }
-
-        if (ReposiotryOutputPath != string.Empty)
-        {
-            Stopwatch stopwatch = new Stopwatch();
-
-            stopwatch.Start();
-
-            ScriptBuilder scriptBuilder = new ScriptBuilder();
-            scriptBuilder.Build();
-
-            stopwatch.Stop();
-            Console.WriteLine($"Script builder elapsed time: {stopwatch.ElapsedMilliseconds} ms");
-        }
-
     }
 }

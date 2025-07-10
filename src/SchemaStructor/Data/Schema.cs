@@ -24,173 +24,167 @@ namespace SchemaStructor.Data
 
         public void Export(int workthreadNumber)
         {
-            try
+            //워크 스레드 개수 설정 ( 1 ~ 자신의 코어 수 )
             {
-                //워크 스레드 개수 설정 ( 1 ~ 자신의 코어 수 )
-                {
-                    workthreadNumber = Math.Clamp(workthreadNumber, 1, Environment.ProcessorCount);
-                }
+                workthreadNumber = Math.Clamp(workthreadNumber, 1, Environment.ProcessorCount);
+            }
 
-                using (var connnection = new MySqlConnection(Program.ConnectionString))
-                {
-                    connnection.Open();
+            using (var connnection = new MySqlConnection(Program.ConnectionString))
+            {
+                connnection.Open();
 
-                    {
+                {
                         
 
-                        //데이터베이스 모든 테이블 이름 얻기
+                    //데이터베이스 모든 테이블 이름 얻기
+                    {
+                        string getTablesHistoryQuery = $"" +
+                            $"SELECT TABLE_NAME, CREATE_TIME, UPDATE_TIME " +
+                            $"FROM INFORMATION_SCHEMA.TABLES " +
+                            $"WHERE TABLE_SCHEMA = SCHEMA();";
+                        MySqlCommand getTablesHistoryCommand = new MySqlCommand(getTablesHistoryQuery, connnection);
+
+                        using (MySqlDataReader tablesHistoryReader = getTablesHistoryCommand.ExecuteReader())
                         {
-                            string getTablesHistoryQuery = $"" +
-                                $"SELECT TABLE_NAME, CREATE_TIME, UPDATE_TIME " +
-                                $"FROM INFORMATION_SCHEMA.TABLES " +
-                                $"WHERE TABLE_SCHEMA = SCHEMA();";
-                            MySqlCommand getTablesHistoryCommand = new MySqlCommand(getTablesHistoryQuery, connnection);
 
-                            using (MySqlDataReader tablesHistoryReader = getTablesHistoryCommand.ExecuteReader())
+                            while (tablesHistoryReader.Read())
                             {
+                                History history = new History();
+                                history.table_name = tablesHistoryReader.GetString(0);
+                                history.create_time = tablesHistoryReader.IsDBNull(1) ? DateTime.MinValue : tablesHistoryReader.GetDateTime(1);
+                                history.update_time = tablesHistoryReader.IsDBNull(2) ? DateTime.MinValue : tablesHistoryReader.GetDateTime(2);
+                                histories.TryAdd(history.table_name, history);
+                            }
+                        }
 
-                                while (tablesHistoryReader.Read())
+                        if (histories.Count <= 0)
+                        {
+                            throw new Exception("[Schema.Export] : 데이터베이스의 테이블에 대한 정보가 존재하지 않음");
+                        }
+                    }
+
+                    //Cache 읽어서 수정사항 확인
+                    {
+                        DirectoryInfo? directoryInfo = Directory.GetParent(Environment.CurrentDirectory);
+                        if (directoryInfo != null && directoryInfo.Parent != null)
+                        {
+                            string cachePath = directoryInfo.Parent.Parent.Parent.FullName + "\\History";
+                            if (!Directory.Exists(cachePath))
+                            {
+                                Directory.CreateDirectory(cachePath);
+                            }
+
+                            // 폴더에 똑같은 테이블과 비교하여 update time은 변경되었는지 확인
+                            List<History> newHistories = histories.Values.OrderBy(history => history.table_name).ToList();
+                            string[] cahceJsonFilePaths = Directory.GetFiles(cachePath, $"*.json");
+                            string? schemaFilePath = cahceJsonFilePaths.FirstOrDefault(file => file.Contains($"{Program.SchemaName}.json"));
+                            if (schemaFilePath != null)
+                            {
+                                string jsonContent = File.ReadAllText(schemaFilePath);
+                                var oldHistories = JsonSerializer.Deserialize<List<History>>(jsonContent);
+                                if (oldHistories != null && oldHistories.Count != 0)
                                 {
-                                    History history = new History();
-                                    history.table_name = tablesHistoryReader.GetString(0);
-                                    history.create_time = tablesHistoryReader.IsDBNull(1) ? DateTime.MinValue : tablesHistoryReader.GetDateTime(1);
-                                    history.update_time = tablesHistoryReader.IsDBNull(2) ? DateTime.MinValue : tablesHistoryReader.GetDateTime(2);
-                                    histories.TryAdd(history.table_name, history);
+                                    foreach (var oldHistory in oldHistories)
+                                    {
+
+                                        if (histories.TryGetValue(oldHistory.table_name, out History? newHistory))
+                                        {
+                                            if (newHistory == null)
+                                            {
+                                                continue;
+                                            }
+
+                                            if (oldHistory.table_name == "master_item_backpack")
+                                            {
+                                                newHistory.update_time = DateTime.MaxValue;
+                                            }
+
+                                            int cmp = DateTime.Compare(oldHistory.update_time, newHistory.update_time);
+                                            if (cmp == 1 || cmp == 0)
+                                            {
+                                                histories.Remove(oldHistory.table_name, out History? outRemove);
+                                            }
+                                        }
+                                    }
                                 }
                             }
 
                             if (histories.Count <= 0)
                             {
-                                throw new Exception("데이터베이스의 테이블에 대한 정보가 존재하지 않음");
+                                throw new Exception("[Schema.Export] : 데이터베이스의 테이블에 수정사항이 존재하지 않음");
                             }
+
+                            // 모두 덮어씌우기
+
+                            string jsonString = JsonSerializer.Serialize(newHistories, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.Create(UnicodeRanges.All) });
+
+                            File.WriteAllText($"{cachePath}/{Program.SchemaName}.json", jsonString, Encoding.UTF8);
+                        }
+                    }
+
+
+                }
+
+                {
+                    //비동기 추출
+                    var tasks = new List<Task>();
+                    for (int i = 0; i < workthreadNumber; i++)
+                    {
+                        tasks.Add(DoExportAsync());
+                    }
+                    Task.WhenAll(tasks).Wait();
+                }
+
+                //Json 직렬화하여 필요시 폴더및 파일 생성
+                {
+
+                    DirectoryInfo? directoryInfo = Directory.GetParent(Environment.CurrentDirectory);
+                    if (directoryInfo != null && directoryInfo.Parent != null)
+                    {
+                        string jsonPath = directoryInfo.Parent.FullName + "\\Json";
+                        if (!Directory.Exists(jsonPath))
+                        {
+                            Directory.CreateDirectory(jsonPath);
                         }
 
-                        //Cache 읽어서 수정사항 확인
+                        Dictionary<string, Table> newTables = tables.ToDictionary(t => t.Name);
+
+                        string[] cahceJsonFilePaths = Directory.GetFiles(jsonPath, $"*.json");
+                        string? schemaFilePath = cahceJsonFilePaths.FirstOrDefault(file => file.Contains($"{Program.SchemaName}.json"));
+                        if (schemaFilePath != null)
                         {
-                            DirectoryInfo? directoryInfo = Directory.GetParent(Environment.CurrentDirectory);
-                            if (directoryInfo != null && directoryInfo.Parent != null)
+                            string jsonContent = File.ReadAllText(schemaFilePath);
+                            List<Table>? oldTables = JsonSerializer.Deserialize<List<Table>>(jsonContent);
+                            if(oldTables != null)
                             {
-                                string cachePath = directoryInfo.Parent.Parent.Parent.FullName + "\\History";
-                                if (!Directory.Exists(cachePath))
+                                foreach (Table oldTable in oldTables)
                                 {
-                                    Directory.CreateDirectory(cachePath);
-                                }
-
-                                // 폴더에 똑같은 테이블과 비교하여 update time은 변경되었는지 확인
-                                List<History> newHistories = histories.Values.OrderBy(history => history.table_name).ToList();
-                                string[] cahceJsonFilePaths = Directory.GetFiles(cachePath, $"*.json");
-                                string? schemaFilePath = cahceJsonFilePaths.FirstOrDefault(file => file.Contains($"{Program.SchemaName}.json"));
-                                if (schemaFilePath != null)
-                                {
-                                    string jsonContent = File.ReadAllText(schemaFilePath);
-                                    var oldHistories = JsonSerializer.Deserialize<List<History>>(jsonContent);
-                                    if (oldHistories != null && oldHistories.Count != 0)
+                                    if (newTables.TryGetValue(oldTable.Name, out Table? newTable))
                                     {
-                                        foreach (var oldHistory in oldHistories)
-                                        {
-
-                                            if (histories.TryGetValue(oldHistory.table_name, out History? newHistory))
-                                            {
-                                                if (newHistory == null)
-                                                {
-                                                    continue;
-                                                }
-
-                                                if (oldHistory.table_name == "master_item_backpack")
-                                                {
-                                                    newHistory.update_time = DateTime.MaxValue;
-                                                }
-
-                                                int cmp = DateTime.Compare(oldHistory.update_time, newHistory.update_time);
-                                                if (cmp == 1 || cmp == 0)
-                                                {
-                                                    histories.Remove(oldHistory.table_name, out History? outRemove);
-                                                }
-                                            }
-                                        }
+                                        newTable = oldTable;
                                     }
-                                }
-
-                                if (histories.Count <= 0)
-                                {
-                                    throw new Exception("데이터베이스의 테이블에 수정사항이 존재하지 않음");
-                                }
-
-                                // 모두 덮어씌우기
-
-                                string jsonString = JsonSerializer.Serialize(newHistories, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.Create(UnicodeRanges.All) });
-
-                                File.WriteAllText($"{cachePath}/{Program.SchemaName}.json", jsonString, Encoding.UTF8);
-                            }
-                        }
-
-
-                    }
-
-                    {
-                        //비동기 추출
-                        var tasks = new List<Task>();
-                        for (int i = 0; i < workthreadNumber; i++)
-                        {
-                            tasks.Add(DoExportAsync());
-                        }
-                        Task.WhenAll(tasks).Wait();
-                    }
-
-                    //Json 직렬화하여 필요시 폴더및 파일 생성
-                    {
-
-                        DirectoryInfo? directoryInfo = Directory.GetParent(Environment.CurrentDirectory);
-                        if (directoryInfo != null && directoryInfo.Parent != null)
-                        {
-                            string jsonPath = directoryInfo.Parent.FullName + "\\Json";
-                            if (!Directory.Exists(jsonPath))
-                            {
-                                Directory.CreateDirectory(jsonPath);
-                            }
-
-                            Dictionary<string, Table> newTables = tables.ToDictionary(t => t.Name);
-
-                            string[] cahceJsonFilePaths = Directory.GetFiles(jsonPath, $"*.json");
-                            string? schemaFilePath = cahceJsonFilePaths.FirstOrDefault(file => file.Contains($"{Program.SchemaName}.json"));
-                            if (schemaFilePath != null)
-                            {
-                                string jsonContent = File.ReadAllText(schemaFilePath);
-                                List<Table>? oldTables = JsonSerializer.Deserialize<List<Table>>(jsonContent);
-                                if(oldTables != null)
-                                {
-                                    foreach (Table oldTable in oldTables)
+                                    else
                                     {
-                                        if (newTables.TryGetValue(oldTable.Name, out Table? newTable))
-                                        {
-                                            newTable = oldTable;
-                                        }
-                                        else
-                                        {
-                                            newTables.Add(oldTable.Name, oldTable);
-                                        }
+                                        newTables.Add(oldTable.Name, oldTable);
                                     }
                                 }
                             }
+                        }
                         
 
-                            var orderByTables = newTables.Values.OrderBy(table => table.Name).ToList();
-                            string jsonString = JsonSerializer.Serialize(orderByTables, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.Create(UnicodeRanges.All) });
+                        var orderByTables = newTables.Values.OrderBy(table => table.Name).ToList();
+                        string jsonString = JsonSerializer.Serialize(orderByTables, new JsonSerializerOptions { WriteIndented = true, Encoder = JavaScriptEncoder.Create(UnicodeRanges.All) });
 
-                            File.WriteAllText($"{jsonPath}/{Program.SchemaName}.json", jsonString, Encoding.UTF8);
-                        }
-
-
+                        File.WriteAllText($"{jsonPath}/{Program.SchemaName}.json", jsonString, Encoding.UTF8);
                     }
 
-                    connnection.Close();
+
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine("Error [Schema.Export] : " + ex.Message);
+
+                connnection.Close();
             }
         }
+
 
         public async Task DoExportAsync()
         {
@@ -204,7 +198,7 @@ namespace SchemaStructor.Data
                 using (var connnection = new MySqlConnection(Program.ConnectionString))
                 {
                     await connnection.OpenAsync();
-                    Console.WriteLine("Task : " + history.table_name);
+                    //Console.WriteLine("Task : " + history.table_name);
 
                     //저장할 테이블 생성
                     Table table = new Table
