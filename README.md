@@ -115,6 +115,18 @@ TableNameSeparator | 테이블명과 스키마의 구분자<br/>
 ## Class 및 Enum 작성
 ![image](https://github.com/user-attachments/assets/c6e544aa-695c-489b-bf9f-6f881c040163)
 
+## History
+![image](https://github.com/user-attachments/assets/dd0828a0-4639-436d-bdc8-db909a0dc26d)
+
+### History 없다면
+![image](https://github.com/user-attachments/assets/e1ae6d87-ecfd-4bcc-86d3-e09d9038af86)
+
+### History 변경 내역이 하나라도 있다면
+![image](https://github.com/user-attachments/assets/4a561a39-c925-431b-8e36-f0dee8138572)
+
+### History 변경 내역이 없다면
+![image](https://github.com/user-attachments/assets/792a0a71-0f82-411b-a8b6-a78bb050b6c7)
+
 ## DB Context
 ![image](https://github.com/user-attachments/assets/8894752f-3f54-453f-8098-0b2fa380c6e3)
 
